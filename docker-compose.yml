@@ -1,0 +1,62 @@
+# SÓLO para desarrollo local. En producción cada microservicio se despliega
+# por separado (Cloud Run / Render) usando como contexto su propia carpeta.
+name: pixelboard
+
+services:
+  board:
+    build:
+      context: ./services/board-service
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      INTERNAL_API_KEY: dev-internal-key
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - pixelboard
+
+  ratelimit:
+    build:
+      context: ./services/ratelimit-service
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      INTERNAL_API_KEY: dev-internal-key
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - pixelboard
+
+  gateway:
+    build:
+      context: ./services/gateway-service
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      ALLOWED_ORIGIN: "http://localhost:3000"
+      BOARD_SERVICE_URL: "http://board:8080"
+      RATELIMIT_SERVICE_URL: "http://ratelimit:8080"
+      INTERNAL_API_KEY: dev-internal-key
+    ports:
+      - "8080:8080"
+    depends_on:
+      board:
+        condition: service_healthy
+      ratelimit:
+        condition: service_healthy
+    networks:
+      - pixelboard
+
+networks:
+  pixelboard:
+    driver: bridge

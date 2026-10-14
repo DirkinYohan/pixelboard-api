@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package state.v1;
+
+// Contrato INTERNO. Lo implementa board-service y lo consume el gateway.
+import "board/v1/board.proto";
+
+service StateService {
+  rpc GetSnapshot (GetSnapshotRequest) returns (GetSnapshotResponse); // Unary
+  rpc ApplyPixel (ApplyPixelRequest) returns (ApplyPixelResponse);    // Unary
+  rpc WatchPixels (WatchPixelsRequest) returns (stream board.v1.Pixel); // Server streaming
+}
+
+message GetSnapshotRequest {}
+message GetSnapshotResponse { repeated board.v1.Pixel pixels = 1; }
+message ApplyPixelRequest { board.v1.Pixel pixel = 1; }
+message ApplyPixelResponse {}
+message WatchPixelsRequest {}

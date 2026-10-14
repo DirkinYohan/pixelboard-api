@@ -1,0 +1,33 @@
+{
+  "name": "pixelboard-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend de Pixelboard: 3 microservicios gRPC (Connect) en un monorepo.",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "workspaces": [
+    "services/*"
+  ],
+  "scripts": {
+    "generate": "buf generate",
+    "postgenerate": "node scripts/prune-gen.mjs",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "concurrently -k -n board,ratelimit,gateway -c blue,magenta,green \"npm run dev --workspace @pixelboard/board-service\" \"npm run dev --workspace @pixelboard/ratelimit-service\" \"npm run dev --workspace @pixelboard/gateway-service\"",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down -v"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.47.0",
+    "@bufbuild/protoc-gen-es": "^2.2.0",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "allowScripts": {
+    "@bufbuild/buf@1.73.0": true,
+    "esbuild@0.28.2": true
+  }
+}

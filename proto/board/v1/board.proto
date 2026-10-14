@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package board.v1;
+
+// Contrato PÚBLICO. Lo implementa el gateway-service y lo consume el navegador.
+service BoardService {
+  rpc GetBoard (GetBoardRequest) returns (GetBoardResponse);        // Unary
+  rpc PaintPixel (PaintPixelRequest) returns (PaintPixelResponse);  // Unary
+  rpc WatchBoard (WatchBoardRequest) returns (stream Pixel);        // Server streaming
+}
+
+message GetBoardRequest {}
+message GetBoardResponse { repeated Pixel pixels = 1; }
+message PaintPixelRequest { Pixel pixel = 1; }
+message PaintPixelResponse {}
+message WatchBoardRequest {}
+message Pixel { int32 x = 1; int32 y = 2; string color = 3; }

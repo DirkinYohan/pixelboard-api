@@ -1,0 +1,24 @@
+version: v2
+# Los tres contratos se generan en cada servicio; scripts/prune-gen.mjs (postgenerate)
+# deja en cada uno SÓLO los que consume:
+#   gateway-service   -> board + state + ratelimit
+#   board-service     -> board + state
+#   ratelimit-service -> ratelimit
+inputs:
+  - directory: proto
+plugins:
+  - local: protoc-gen-es
+    out: services/gateway-service/src/gen
+    opt:
+      - target=ts
+      - import_extension=js
+  - local: protoc-gen-es
+    out: services/board-service/src/gen
+    opt:
+      - target=ts
+      - import_extension=js
+  - local: protoc-gen-es
+    out: services/ratelimit-service/src/gen
+    opt:
+      - target=ts
+      - import_extension=js

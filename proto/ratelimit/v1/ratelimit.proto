@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package ratelimit.v1;
+
+// Contrato INTERNO. Lo implementa ratelimit-service y lo consume el gateway.
+service RateLimitService {
+  rpc Check (CheckRequest) returns (CheckResponse); // Unary
+}
+
+message CheckRequest { string client_id = 1; }
+message CheckResponse { bool allowed = 1; int32 retry_after_ms = 2; }

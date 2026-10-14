@@ -22,24 +22,40 @@ const EXPOSED_RESPONSE_HEADERS = [
   "Grpc-Status-Details-Bin",
 ].join(", ");
 
-/** ALLOWED_ORIGIN admite "*" o una lista de orígenes separada por comas. */
-export function isOriginAllowed(origin: string, allowedOrigin: string): boolean {
-  if (allowedOrigin.trim() === "*") return true;
-  return allowedOrigin
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => value !== "")
-    .includes(origin);
+/**
+ * Compara un origen con un patrón de ALLOWED_ORIGIN.
+ * Acepta coincidencia exacta y un comodín, p. ej. `https://pixelboard-*.vercel.app`
+ * (imprescindible para que funcionen los dominios de preview de Vercel).
+ */
+function matchesOrigin(origin: string, pattern: string): boolean {
+  if (pattern === "*") return true;
+  const wildcardAt = pattern.indexOf("*");
+  if (wildcardAt === -1) return pattern === origin;
+  const prefix = pattern.slice(0, wildcardAt);
+  const suffix = pattern.slice(wildcardAt + 1);
+  return (
+    origin.length >= prefix.length + suffix.length &&
+    origin.startsWith(prefix) &&
+    origin.endsWith(suffix)
+  );
 }
 
-/** Responde al preflight y responde 200 a /health (antes de llegar a Connect). */
+/** ALLOWED_ORIGIN admite "*", comodines y una lista separada por comas. */
+export function isOriginAllowed(origin: string, allowedOrigin: string): boolean {
+  const patterns = allowedOrigin
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value !== "");
+  return patterns.some((pattern) => matchesOrigin(origin, pattern));
+}
+
 function writePlainText(response: GatewayResponse, statusCode: number, body: string): void {
   response.statusCode = statusCode;
   response.setHeader("content-type", "text/plain; charset=utf-8");
   response.end(body);
 }
 
-/** Añade CORS a cualquier handler de Connect y gestiona OPTIONS. */
+/** Añade CORS a cualquier handler de Connect y gestiona OPTIONS y /health. */
 export function withCors(handler: GatewayHandler, allowedOrigin: string): GatewayHandler {
   return (request, response) => {
     const origin = request.headers.origin;

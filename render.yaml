@@ -1,0 +1,68 @@
+# Blueprint de Render: crea los TRES microservicios del backend de una sola vez.
+#
+#   Render Dashboard -> New -> Blueprint -> conecta el repo pixelboard-api
+#
+# Notas importantes:
+#  * Los tres servicios deben estar en la MISMA región.
+#  * board-service y ratelimit-service guardan estado en memoria: 1 instancia.
+#  * Render habla HTTP/1.1 con el contenedor, por eso el gateway usa
+#    INTERNAL_PROTOCOL=connect (protocolo Connect sobre HTTP/1.1) en lugar de
+#    gRPC sobre h2c. El código soporta ambos sin cambios.
+services:
+  - type: web
+    name: pixelboard-ratelimit
+    runtime: docker
+    plan: free
+    region: oregon
+    rootDir: services/ratelimit-service
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: INTERNAL_API_KEY
+        generateValue: true
+
+  - type: web
+    name: pixelboard-board
+    runtime: docker
+    plan: free
+    region: oregon
+    rootDir: services/board-service
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: INTERNAL_API_KEY
+        generateValue: true
+
+  - type: web
+    name: pixelboard-gateway
+    runtime: docker
+    plan: free
+    region: oregon
+    rootDir: services/gateway-service
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      # Misma clave que los servicios internos (la genera el propio Blueprint).
+      - key: INTERNAL_API_KEY
+        fromService:
+          type: web
+          name: pixelboard-board
+          envVarKey: INTERNAL_API_KEY
+      # URL pública de cada servicio interno (se rellena sola al crearse).
+      - key: BOARD_SERVICE_URL
+        fromService:
+          type: web
+          name: pixelboard-board
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: RATELIMIT_SERVICE_URL
+        fromService:
+          type: web
+          name: pixelboard-ratelimit
+          envVarKey: RENDER_EXTERNAL_URL
+      # Render termina TLS y habla HTTP/1.1 con el contenedor.
+      - key: INTERNAL_PROTOCOL
+        value: connect
+      # Dominio(s) del frontend en Vercel. Se pide al crear el Blueprint.
+      # Ej.: https://pixelboard.vercel.app,https://pixelboard-*.vercel.app
+      - key: ALLOWED_ORIGIN
+        sync: false

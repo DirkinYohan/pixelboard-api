@@ -251,24 +251,86 @@ La cuadrícula y la lista de suscriptores viven **en memoria del proceso**. Con 
 3. `pixelboard-web` en Vercel con `NEXT_PUBLIC_API_URL` = URL del gateway.
 4. Actualizar `ALLOWED_ORIGIN` del gateway con el dominio de Vercel.
 
-## Alternativa en Render
+## Despliegue en Render
 
-Tres **Web Services** desde el mismo repositorio:
+### 0) Sube el repositorio a GitHub
 
-| Ajuste | Valor |
-|---|---|
-| Environment | `Docker` |
-| Root Directory | `services/gateway-service` (y equivalentes) |
-| Dockerfile Path | `./Dockerfile` |
-| Health Check Path | `/health` |
-| Max instances | `1` en `board` y `ratelimit` |
+Render despliega desde Git. Desde `pixelboard-api`:
 
-**Diferencias con Cloud Run:**
+```bash
+git init && git add . && git commit -m "pixelboard-api"
+git branch -M main
+git remote add origin https://github.com/<tu-usuario>/pixelboard-api.git
+git push -u origin main
+```
 
-1. **No hay h2c hasta el contenedor.** Render termina TLS y habla HTTP/1.1 con tu servicio, así que el gRPC nativo (`createGrpcTransport`) no puede atravesarlo. Solución: poner `INTERNAL_PROTOCOL=connect` en el **gateway**; el resto del código no cambia (usa el protocolo Connect sobre HTTP/1.1). Los servicios internos siguen protegidos con `INTERNAL_API_KEY`.
-2. **URLs internas.** Usa la URL pública `https://…onrender.com` de cada servicio como `BOARD_SERVICE_URL` / `RATELIMIT_SERVICE_URL` (o la red privada de Render si ambos están en la misma región y plan).
-3. **`/health` funciona igual** sobre HTTP/1.1 (el listener dual lo atiende sin cambios).
-4. **Cold starts** más agresivos en el plan gratuito. Ver *Problemas comunes*.
+> El código generado (`services/*/src/gen`) **está en el repo a propósito**: el contexto de build de Docker es sólo `services/<servicio>`, así que la imagen no puede ejecutar `buf`.
+
+### 1) Opción A — Blueprint (recomendado, un solo paso)
+
+El repo incluye `render.yaml`. En el dashboard de Render:
+
+**New → Blueprint → conecta el repositorio `pixelboard-api`**
+
+Render crea los tres servicios y rellena solo:
+
+- `INTERNAL_API_KEY` (la genera y la comparte con el gateway vía `fromService`).
+- `BOARD_SERVICE_URL` y `RATELIMIT_SERVICE_URL` (desde `RENDER_EXTERNAL_URL`).
+- `INTERNAL_PROTOCOL=connect`.
+
+Lo único que te pedirá es **`ALLOWED_ORIGIN`**, donde va el dominio de Vercel:
+
+```text
+https://pixelboard.vercel.app,https://pixelboard-*.vercel.app
+```
+
+### 2) Opción B — manual (3 Web Services)
+
+**New → Web Service**, conecta el repo y repite para cada servicio:
+
+| Ajuste | gateway | board | ratelimit |
+|---|---|---|---|
+| Name | `pixelboard-gateway` | `pixelboard-board` | `pixelboard-ratelimit` |
+| Language / Runtime | **Docker** | **Docker** | **Docker** |
+| Root Directory | `services/gateway-service` | `services/board-service` | `services/ratelimit-service` |
+| Dockerfile Path | `./Dockerfile` | `./Dockerfile` | `./Dockerfile` |
+| Health Check Path | `/health` | `/health` | `/health` |
+| Instance Type | Free | Free | Free |
+| Region | **la misma en los tres** | | |
+
+Variables de entorno:
+
+```text
+# board-service y ratelimit-service
+INTERNAL_API_KEY = <cadena aleatoria larga, LA MISMA en los tres>
+```
+
+```text
+# gateway-service
+INTERNAL_API_KEY      = <la misma>
+BOARD_SERVICE_URL     = https://pixelboard-board.onrender.com
+RATELIMIT_SERVICE_URL = https://pixelboard-ratelimit.onrender.com
+INTERNAL_PROTOCOL     = connect
+ALLOWED_ORIGIN        = https://pixelboard.vercel.app,https://pixelboard-*.vercel.app
+```
+
+> Copia la URL que Render muestra arriba del servicio (**no** le añadas `:8080`). Render inyecta `PORT` y el código ya lo respeta.
+
+### Las 4 diferencias con Cloud Run
+
+1. **No hay h2c hasta el contenedor.** Render termina TLS y habla **HTTP/1.1** con tu servicio, así que `createGrpcTransport` (gRPC sobre HTTP/2) no atraviesa. Por eso el gateway va con **`INTERNAL_PROTOCOL=connect`**: usa el protocolo Connect por HTTP/1.1 y el resto del código no cambia. *(Si algún día tienes h2c de verdad, basta con quitar esa variable.)*
+2. **Sin `--use-http2` ni `--max-instances`.** El equivalente a `max-instances=1` es **Scaling → Instance Count = 1** en `board` y `ratelimit` (en el plan Free ya es 1).
+3. **Red interna opcional.** Con el plan Free usa las URLs públicas + `x-internal-key` (funciona siempre). En planes de pago puedes usar la red privada cambiando `BOARD_SERVICE_URL` por `http://pixelboard-board:10000`.
+4. **Cold starts del plan Free.** El servicio se duerme a los ~15 min de inactividad y la primera petición tarda ~30-60 s. Ver *Problemas comunes*.
+
+> **Importante:** `INTERNAL_API_KEY` debe ser **idéntica** en los tres servicios. Si la cambias en uno, cámbiala en los tres.
+
+### Comprobación (desde tu máquina)
+
+```bash
+curl -s https://pixelboard-gateway.onrender.com/health
+# -> ok
+```
 
 ## Pruebas con `buf curl` y `curl`
 
